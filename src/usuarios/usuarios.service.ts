@@ -52,9 +52,12 @@ export class UsuariosService {
     if (isNumber) {
       usuario = await this.usuarioRepository.findOneBy({ id: +termino });
     } else {
-      usuario = await this.usuarioRepository.findOneBy({
-        numeroDocumento: termino,
-      });
+      const queryBuilder = this.usuarioRepository.createQueryBuilder();
+      usuario = await queryBuilder
+        .where('email =:email', {
+          email: termino,
+        })
+        .getOne();
     }
 
     if (!usuario) {
@@ -63,8 +66,22 @@ export class UsuariosService {
     return usuario;
   }
 
-  update(id: number, updateUsuarioDto: UpdateUsuarioDto) {
-    return `This action updates a #${id} usuario`;
+  async update(id: number, updateUsuarioDto: UpdateUsuarioDto) {
+    const usuario = await this.usuarioRepository.preload({
+      id,
+      ...updateUsuarioDto,
+    });
+
+    if (!usuario) {
+      throw new NotFoundException(`Usuario con el id: ${id}, no se encuentra`);
+    }
+
+    try {
+      await this.usuarioRepository.save(usuario);
+      return usuario;
+    } catch (error) {
+      this.handleDBExceptions(error);
+    }
   }
 
   async remove(id: number) {
@@ -75,14 +92,12 @@ export class UsuariosService {
   }
 
   private handleDBExceptions(error: any) {
-    if (error.code === '23505') {
-      throw new BadRequestException(error.detail);
-    }
+    if (error.code === '23505') throw new BadRequestException(error.detail);
 
     this.logger.error(error);
-
+    // console.log(error)
     throw new InternalServerErrorException(
-      'Unxpected error, check server logs',
+      'Unexpected error, check server logs',
     );
   }
 }
